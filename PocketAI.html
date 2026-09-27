@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>PocketAI</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root { --vh: 100vh; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overscroll-behavior: none; }
+  body {
+    font-family: -apple-system, Roboto, sans-serif; background: #0f1117; color: #e6e6e6;
+    height: 100vh; height: 100dvh; height: var(--vh);
+    display: flex; flex-direction: column;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  header { padding: 12px 16px; background: #171a23; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #262a36; flex-shrink: 0; }
+  header h1 { font-size: 17px; color: #d8b4fe; }
+  #chat { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px; }
+  .msg { max-width: 88%; padding: 10px 14px; border-radius: 16px; margin-bottom: 10px; white-space: pre-wrap; word-wrap: break-word; overflow-wrap: anywhere; font-size: 15px; line-height: 1.45; }
+  .user { background: #7c3aed; margin-left: auto; border-bottom-right-radius: 4px; }
+  .ai { background: #1e2230; margin-right: auto; border-bottom-left-radius: 4px; }
+  .ai button { font-size: 13px; padding: 8px 10px; margin: 4px 4px 0 0; border-radius: 14px; }
+  .err { background: #3a1620; color: #ff9aa2; }
+  .chips { display: flex; gap: 6px; padding: 0 12px 6px; flex-wrap: wrap; flex-shrink: 0; }
+  .chip { background: #262a36; border-radius: 12px; padding: 4px 10px; font-size: 12px; color: #a5b4fc; }
+  #composer { display: flex; gap: 8px; padding: 10px 12px; background: #171a23; border-top: 1px solid #262a36; flex-shrink: 0; }
+  #input { flex: 1; min-width: 0; background: #262a36; border: none; border-radius: 22px; padding: 12px 16px; color: #fff; font-size: 16px; outline: none; }
+  button { background: #7c3aed; color: #fff; border: none; border-radius: 22px; padding: 0 16px; font-size: 16px; min-height: 44px; touch-action: manipulation; cursor: pointer; }
+  .iconbtn { background: #262a36; padding: 10px 13px; font-size: 18px; min-width: 44px; min-height: 44px; flex-shrink: 0; }
+  .iconbtn.on { background: #7c3aed; }
+  img.gen { max-width: 100%; border-radius: 12px; margin-top: 8px; display: block; }
+  a.dl { color: #a5b4fc; font-size: 13px; display: inline-block; margin-top: 6px; padding: 6px 0; }
+  #settings { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none; align-items: center; justify-content: center; z-index: 10; padding: env(safe-area-inset-top,0px) env(safe-area-inset-right,16px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,16px); }
+  #settings .box { background: #1e2230; padding: 20px; border-radius: 16px; width: 100%; max-width: 420px; max-height: 90vh; max-height: 90dvh; overflow-y: auto; }
+  #settings input, #settings select { width: 100%; background: #262a36; border: none; color: #fff; padding: 12px; border-radius: 10px; margin: 6px 0 12px; font-size: 16px; }
+  #settings label { font-size: 13px; color: #9aa0b0; }
+  @media (min-width: 640px) { body { max-width: 480px; margin: 0 auto; box-shadow: 0 0 40px rgba(0,0,0,.4); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>◆ PocketAI</h1>
+  <button class="iconbtn" onclick="showSettings()">⚙️</button>
+</header>
+<div id="chat"></div>
+<div class="chips" id="chips"></div>
+<div id="composer">
+  <button class="iconbtn" onclick="pickFile('application/pdf')" title="Attach PDF">📄</button>
+  <button class="iconbtn" onclick="pickFile('image/*')" title="Attach image">🖼️</button>
+  <button class="iconbtn" id="imgMode" onclick="toggleImgMode()" title="Image generation mode">✨</button>
+  <input id="input" placeholder="Message PocketAI…" onkeydown="if(event.key==='Enter')send()">
+  <button onclick="send()">➤</button>
+</div>
+<input type="file" id="filepick" hidden onchange="onFile(event)">
+<div id="settings">
+  <div class="box">
+    <b style="color:#d8b4fe">Settings</b><br><br>
+    <label>Gemini API key (free: aistudio.google.com → Get API key)</label>
+    <input id="apikey" placeholder="Paste your API key">
+    <label>Model</label>
+    <select id="model">
+      <option value="gemini-2.5-flash">Gemini 2.5 Flash (smart)</option>
+      <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (fast)</option>
+    </select>
+    <label>Image resolution</label>
+    <select id="res">
+      <option value="1920x1080">Full HD 1920×1080</option>
+      <option value="3840x2160">4K 3840×2160 (slow, may fail)</option>
+    </select>
+    <button onclick="saveSettings()" style="width:100%;padding:12px">Save</button>
+    <button onclick="hideSettings()" style="width:100%;padding:12px;margin-top:8px;background:#262a36">Close</button>
+  </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const chatEl = document.getElementById('chat');
+let history = JSON.parse(localStorage.getItem('phist') || '[]');
+let pending = [];        // attachments for next message
+let imageMode = false;
+
+// Pre-fill the Gemini API key on first run so it works out of the box.
+if (!localStorage.getItem('pkey')) {
+  localStorage.setItem('pkey', 'AQ.Ab8RN6LrOMIe925Qza5M5Q71ObYQhyImacmkUVtgUafxbyxBFQ');
+}
+
+// Real viewport height on mobile browsers (address bar shows/hides -> vh changes).
+function setVh(){ document.documentElement.style.setProperty('--vh', window.innerHeight + 'px'); }
+setVh();
+window.addEventListener('resize', setVh);
+window.addEventListener('orientationchange', setVh);
+// Keep the composer visible above the on-screen keyboard on mobile.
+document.getElementById('input').addEventListener('focus', () => {
+  setTimeout(() => chatEl.scrollTop = chatEl.scrollHeight, 300);
+});
+
+function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+function render(){
+  chatEl.innerHTML = '';
+  history.forEach(m => addMsg(m.role, m.text, false));
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+function addMsg(role, text, save=true){
+  const d = document.createElement('div');
+  d.className = 'msg ' + role;
+  d.innerHTML = esc(text);
+  chatEl.appendChild(d);
+  chatEl.scrollTop = chatEl.scrollHeight;
+  if (save){ history.push({role, text}); localStorage.setItem('phist', JSON.stringify(history.slice(-40))); }
+}
+function showSettings(){
+  document.getElementById('apikey').value = localStorage.getItem('pkey') || '';
+  document.getElementById('model').value = localStorage.getItem('pmodel') || 'gemini-2.5-flash';
+  document.getElementById('settings').style.display = 'flex';
+}
+function hideSettings(){ document.getElementById('settings').style.display = 'none'; }
+function saveSettings(){
+  localStorage.setItem('pkey', document.getElementById('apikey').value.trim());
+  localStorage.setItem('pmodel', document.getElementById('model').value);
+  localStorage.setItem('pres', document.getElementById('res').value);
+  hideSettings();
+  addMsg('ai', 'Settings saved ✔');
+}
+function toggleImgMode(){
+  imageMode = !imageMode;
+  document.getElementById('imgMode').classList.toggle('on', imageMode);
+  document.getElementById('input').placeholder = imageMode ? 'Describe the image to generate…' : 'Message PocketAI…';
+}
+
+/* ---------- attachments ---------- */
+function pickFile(accept){ const f=document.getElementById('filepick'); f.accept=accept; f.click(); }
+function onFile(e){
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = reader.result;
+    const b64 = dataUrl.split(',')[1];
+    pending.push({ mime: file.type, data: b64, name: file.name });
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = '📎 ' + file.name;
+    document.getElementById('chips').appendChild(chip);
+    if (file.type === 'application/pdf') offerPdfTools(file, b64);
+    if (file.type.startsWith('image/')) addMsg('user', '🖼️ [image attached: ' + file.name + '] — ask me anything about it.');
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+function offerPdfTools(file, b64){
+  addMsg('user', '📄 [PDF attached: ' + file.name + ']');
+  const d = document.createElement('div');
+  d.className = 'msg ai';
+  d.innerHTML = 'What should I do with this PDF?<br><br>' +
+    '<button onclick="pdfAction(\'extract\')">Extract text</button> ' +
+    '<button onclick="pdfAction(\'summarize\')">Summarize</button> ' +
+    '<button onclick="pdfAction(\'amplify\')">Amplify/Expand</button> ' +
+    '<button onclick="pdfAction(\'suggest\')">Give suggestions</button>';
+  chatEl.appendChild(d);
+  window._pdf = { name: file.name, b64 };
+}
+function pdfAction(kind){
+  const prompts = {
+    extract: 'Extract ALL text from this PDF verbatim, preserving structure. If it is long, give it in full anyway.',
+    summarize: 'Read this PDF and give a clear, well-structured summary with key points.',
+    amplify: 'Read this PDF and AMPLIFY it: expand every section with more detail, examples and depth, as a long-form enhanced document.',
+    suggest: 'Read this PDF and give concrete, actionable suggestions for improvement (content, structure, writing, anything relevant).'
+  };
+  askGemini([{ text: prompts[kind] }, { inline_data: { mime_type: 'application/pdf', data: window._pdf.b64 } }]);
+}
+
+/* ---------- Gemini brain ---------- */
+async function askGemini(parts){
+  const key = localStorage.getItem('pkey');
+  if (!key){ addMsg('err', '⚠️ No API key. Tap ⚙️ and paste a free Gemini key (aistudio.google.com).'); return; }
+  const model = localStorage.getItem('pmodel') || 'gemini-2.5-flash';
+  addMsg('ai', '…', false);
+  const thinking = chatEl.lastChild;
+  try {
+    const body = { contents: [{ parts }] };
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    const j = await r.json();
+    if (j.error) throw new Error(j.error.message);
+    const text = j.candidates[0].content.parts.map(p => p.text || '').join('');
+    thinking.remove();
+    addMsg('ai', text);
+  } catch(err){
+    thinking.remove();
+    addMsg('err', 'Error: ' + err.message);
+  }
+}
+
+/* ---------- image generation (Pollinations, free) ---------- */
+async function genImage(prompt){
+  const res = (localStorage.getItem('pres') || '1920x1080').split('x');
+  const w = res[0], h = res[1];
+  addMsg('user', '✨ Generate image: ' + prompt);
+  const hold = document.createElement('div');
+  hold.className = 'msg ai';
+  hold.textContent = '🎨 Generating ' + w + '×' + h + '… (can take 30–90s)';
+  chatEl.appendChild(hold); chatEl.scrollTop = chatEl.scrollHeight;
+  const url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=' + w + '&height=' + h + '&nologo=true&seed=' + Math.floor(Math.random()*99999);
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('image service failed (try lower resolution)');
+    const blob = await r.blob();
+    const obj = URL.createObjectURL(blob);
+    hold.innerHTML = '<img class="gen" src="' + obj + '"><a class="dl" download="pocketai.png" href="' + obj + '">⬇️ Download full size</a>';
+    history.push({role:'user', text:'✨ ' + prompt}, {role:'ai', text:'[image generated]'});
+    localStorage.setItem('phist', JSON.stringify(history.slice(-40)));
+  } catch(err){
+    hold.textContent = '⚠️ ' + err.message;
+  }
+}
+
+/* ---------- send ---------- */
+function send(){
+  const inp = document.getElementById('input');
+  const text = inp.value.trim(); if(!text) return;
+  inp.value = '';
+  if (imageMode){ genImage(text); return; }
+  addMsg('user', text);
+  const parts = [{ text }];
+  pending.forEach(a => parts.push({ inline_data: { mime_type: a.mime, data: a.data } }));
+  pending = []; document.getElementById('chips').innerHTML = '';
+  askGemini(parts);
+}
+render();
+</script>
+</body>
+</html>
